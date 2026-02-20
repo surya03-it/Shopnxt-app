@@ -5,185 +5,185 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>ShopNxt</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    body {
-      font-family: sans-serif;
-      background: #f5f5f5;
-      color: #222;
-    }
+    body { font-family: Arial, sans-serif; background: #f4f4f4; color: #222; }
 
-    /* Navbar */
+    /* ── Navbar ─────────────────────────────────── */
     nav {
-      background: #222;
-      color: #fff;
+      background: #1a1a2e; color: #fff;
       padding: 1rem 2rem;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
+      display: flex; align-items: center; justify-content: space-between;
     }
-    nav h1 { font-size: 1.4rem; }
-    nav a  { color: #fff; text-decoration: none; font-size: 0.9rem; }
+    nav .brand { font-size: 1.4rem; font-weight: 700; letter-spacing: 1px; }
+    nav a { color: #e8ff47; text-decoration: none; font-size: 0.9rem; font-weight: 600; }
+    nav a:hover { text-decoration: underline; }
 
-    /* Hero */
+    /* ── Hero ───────────────────────────────────── */
     .hero {
-      background: #1a73e8;
-      color: #fff;
-      text-align: center;
-      padding: 4rem 1rem;
+      background: linear-gradient(135deg, #1a73e8, #0d47a1);
+      color: #fff; text-align: center; padding: 4rem 1rem;
     }
-    .hero h2 { font-size: 2rem; margin-bottom: 0.5rem; }
-    .hero p  { font-size: 1rem; opacity: 0.9; }
+    .hero h2 { font-size: 2.2rem; margin-bottom: 0.6rem; }
+    .hero p  { font-size: 1rem; opacity: 0.88; }
 
-    /* Products */
-    .section { max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
-    .section h3 { font-size: 1.3rem; margin-bottom: 1.2rem; }
+    /* ── Products ───────────────────────────────── */
+    .section { max-width: 1100px; margin: 2.5rem auto; padding: 0 1.5rem; }
+    .section-title {
+      font-size: 1.4rem; font-weight: 700;
+      margin-bottom: 1.5rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 3px solid #1a73e8;
+    }
 
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: 1rem;
+      grid-template-columns: repeat(auto-fill, minmax(195px, 1fr));
+      gap: 1.2rem;
     }
 
     .card {
-      background: #fff;
-      border: 1px solid #ddd;
-      border-radius: 8px;
-      padding: 1.2rem;
+      background: #fff; border: 1px solid #e0e0e0;
+      border-radius: 10px; padding: 1.5rem 1rem;
       text-align: center;
+      transition: transform 0.2s, box-shadow 0.2s;
     }
-    .card .emoji { font-size: 2.5rem; margin-bottom: 0.6rem; }
-    .card h4    { font-size: 0.95rem; margin-bottom: 0.4rem; }
-    .card .price{ color: #1a73e8; font-weight: bold; margin-bottom: 0.8rem; }
-    .card button{
-      background: #1a73e8;
-      color: #fff;
-      border: none;
-      padding: 0.4rem 1rem;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 0.85rem;
+    .card:hover { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.10); }
+    .card .icon  { font-size: 2.8rem; margin-bottom: 0.7rem; display: block; line-height: 1; }
+    .card h4     { font-size: 0.95rem; font-weight: 600; margin-bottom: 0.5rem; }
+    .card .price { color: #1a73e8; font-weight: 700; font-size: 1.1rem; margin-bottom: 1rem; }
+    .card .btn {
+      display: inline-block; background: #1a73e8; color: #fff;
+      border: none; border-radius: 6px;
+      padding: 0.5rem 1.2rem; font-size: 0.85rem; font-weight: 600;
+      cursor: pointer; transition: background 0.2s;
     }
-    .card button:hover { background: #1558b0; }
+    .card .btn:hover { background: #1558b0; }
 
-    /* Contact */
-    .contact {
-      max-width: 500px;
-      margin: 2rem auto;
-      padding: 1.5rem;
-      background: #fff;
-      border: 1px solid #ddd;
-      border-radius: 8px;
+    /* ── Contact ────────────────────────────────── */
+    .contact-wrap {
+      max-width: 520px; margin: 2rem auto 3rem;
+      background: #fff; border: 1px solid #e0e0e0;
+      border-radius: 10px; padding: 2rem;
     }
-    .contact h3 { margin-bottom: 1rem; }
-    .contact input,
-    .contact textarea {
-      width: 100%;
-      padding: 0.6rem;
-      margin-bottom: 0.8rem;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      font-size: 0.9rem;
-      font-family: sans-serif;
+    .contact-wrap h3  { font-size: 1.3rem; margin-bottom: 0.5rem; }
+    .contact-email    { font-size: 0.9rem; color: #555; margin-bottom: 1.2rem; }
+    .contact-email a  { color: #1a73e8; font-weight: 600; text-decoration: none; }
+    .contact-wrap input,
+    .contact-wrap textarea {
+      width: 100%; padding: 0.65rem 0.85rem;
+      margin-bottom: 0.9rem;
+      border: 1px solid #ccc; border-radius: 6px;
+      font-size: 0.9rem; font-family: Arial, sans-serif;
+      outline: none; transition: border-color 0.2s;
     }
-    .contact button {
-      background: #222;
-      color: #fff;
-      border: none;
-      padding: 0.6rem 1.4rem;
-      border-radius: 4px;
-      cursor: pointer;
+    .contact-wrap input:focus,
+    .contact-wrap textarea:focus { border-color: #1a73e8; }
+    .contact-wrap .send-btn {
+      background: #1a1a2e; color: #fff; border: none;
+      border-radius: 6px; padding: 0.7rem 1.8rem;
+      font-size: 0.9rem; font-weight: 600; cursor: pointer;
+      transition: background 0.2s;
     }
-    .contact .email { margin-bottom: 1rem; color: #555; font-size: 0.9rem; }
-    .contact .email a { color: #1a73e8; }
-    #msg { color: green; margin-top: 0.6rem; font-size: 0.9rem; display: none; }
+    .contact-wrap .send-btn:hover { background: #16213e; }
+    .success-msg {
+      color: #2e7d32; font-size: 0.9rem; font-weight: 600;
+      margin-top: 0.8rem; display: none;
+    }
 
-    /* Footer */
+    /* ── Footer ─────────────────────────────────── */
     footer {
-      text-align: center;
-      padding: 1.5rem;
-      background: #222;
-      color: #aaa;
+      background: #1a1a2e; color: #aaa;
+      text-align: center; padding: 1.4rem;
       font-size: 0.85rem;
-      margin-top: 2rem;
     }
+    footer a { color: #e8ff47; text-decoration: none; }
 
-    /* Toast */
+    /* ── Toast ──────────────────────────────────── */
     #toast {
-      position: fixed;
-      bottom: 1.5rem;
-      right: 1.5rem;
-      background: #222;
-      color: #fff;
-      padding: 0.7rem 1.2rem;
-      border-radius: 6px;
-      font-size: 0.875rem;
-      display: none;
+      position: fixed; bottom: 1.5rem; right: 1.5rem;
+      background: #1a1a2e; color: #e8ff47;
+      padding: 0.75rem 1.3rem; border-radius: 8px;
+      font-size: 0.875rem; font-weight: 600;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+      display: none; z-index: 999;
     }
   </style>
 </head>
 <body>
 
-  <nav>
-    <h1>◆ ShopNxt</h1>
-    <a href="mailto:surya.shopnxt@mail.com">Contact Us</a>
-  </nav>
+<!-- ── Navbar ──────────────────────────────────────────────────────────── -->
+<nav>
+  <span class="brand">&#9670; ShopNxt</span>
+  <a href="#contact">Contact Us</a>
+</nav>
 
-  <div class="hero">
-    <h2>Welcome to ShopNxt</h2>
-    <p>Simple shopping. Great products.</p>
-  </div>
+<!-- ── Hero ────────────────────────────────────────────────────────────── -->
+<div class="hero">
+  <h2>Welcome to ShopNxt</h2>
+  <p>Simple shopping. Great products. Fast delivery.</p>
+</div>
 
-  <div class="section">
-    <h3>Our Products</h3>
-    <div class="grid">
-      {% for p in products %}
-      <div class="card">
-        <div class="emoji">{{ p.emoji }}</div>
-        <h4>{{ p.name }}</h4>
-        <div class="price">${{ "%.2f"|format(p.price) }}</div>
-        <button onclick="addToCart('{{ p.name }}')">Add to Cart</button>
-      </div>
-      {% endfor %}
+<!-- ── Products ────────────────────────────────────────────────────────── -->
+<div class="section">
+  <div class="section-title">Our Products</div>
+  <div class="grid">
+    {% for p in products %}
+    <div class="card">
+      <span class="icon">{{ p.icon | safe }}</span>
+      <h4>{{ p.name }}</h4>
+      <div class="price">${{ "%.2f" | format(p.price) }}</div>
+      <button class="btn" onclick="addToCart('{{ p.name }}')">Add to Cart</button>
     </div>
+    {% endfor %}
   </div>
+</div>
 
-  <div class="contact" id="contact">
-    <h3>Contact Us</h3>
-    <div class="email">📧 <a href="mailto:surya.shopnxt@mail.com">surya.shopnxt@mail.com</a></div>
-    <input  type="text"  id="name"    placeholder="Your name" />
-    <input  type="email" id="email"   placeholder="Your email" />
-    <textarea id="message" rows="3"   placeholder="Your message"></textarea>
-    <button onclick="sendMsg()">Send Message</button>
-    <div id="msg">✅ Message sent! We'll get back to you soon.</div>
+<!-- ── Contact ──────────────────────────────────────────────────────────── -->
+<div class="contact-wrap" id="contact">
+  <h3>Contact Us</h3>
+  <div class="contact-email">
+    &#128231;&nbsp;
+    <a href="mailto:surya.shopnxt@mail.com">surya.shopnxt@mail.com</a>
   </div>
+  <input  type="text"  id="cname"    placeholder="Your name"    />
+  <input  type="email" id="cemail"   placeholder="Your email"   />
+  <textarea             id="cmsg"    rows="4" placeholder="Your message"></textarea>
+  <button class="send-btn" onclick="sendMsg()">Send Message</button>
+  <div class="success-msg" id="successMsg">
+    &#10003; Message sent! We will get back to you soon.
+  </div>
+</div>
 
-  <footer>
-    © 2025 ShopNxt &nbsp;|&nbsp; surya.shopnxt@mail.com
-  </footer>
+<!-- ── Footer ──────────────────────────────────────────────────────────── -->
+<footer>
+  &copy; 2025 ShopNxt &nbsp;|&nbsp;
+  <a href="mailto:surya.shopnxt@mail.com">surya.shopnxt@mail.com</a>
+</footer>
 
-  <div id="toast"></div>
+<!-- ── Toast ───────────────────────────────────────────────────────────── -->
+<div id="toast"></div>
 
-  <script>
-    function addToCart(name) {
-      const t = document.getElementById("toast");
-      t.textContent = "✔ " + name + " added!";
-      t.style.display = "block";
-      clearTimeout(t._t);
-      t._t = setTimeout(() => t.style.display = "none", 2500);
-    }
+<script>
+  function addToCart(name) {
+    var t = document.getElementById("toast");
+    t.textContent = "Added: " + name;
+    t.style.display = "block";
+    clearTimeout(t._timer);
+    t._timer = setTimeout(function () { t.style.display = "none"; }, 2500);
+  }
 
-    function sendMsg() {
-      const name = document.getElementById("name").value.trim();
-      const email = document.getElementById("email").value.trim();
-      const msg = document.getElementById("message").value.trim();
-      if (!name || !email || !msg) { alert("Please fill in all fields."); return; }
-      document.getElementById("msg").style.display = "block";
-      document.getElementById("name").value = "";
-      document.getElementById("email").value = "";
-      document.getElementById("message").value = "";
-    }
-  </script>
+  function sendMsg() {
+    var name  = document.getElementById("cname").value.trim();
+    var email = document.getElementById("cemail").value.trim();
+    var msg   = document.getElementById("cmsg").value.trim();
+    if (!name || !email || !msg) { alert("Please fill in all fields."); return; }
+    document.getElementById("successMsg").style.display = "block";
+    document.getElementById("cname").value  = "";
+    document.getElementById("cemail").value = "";
+    document.getElementById("cmsg").value   = "";
+  }
+</script>
 
 </body>
 </html>
