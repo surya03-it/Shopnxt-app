@@ -1,190 +1,219 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>ShopNxt</title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ShopNxt</title>
 
-    body { font-family: Arial, sans-serif; background: #f4f4f4; color: #222; }
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
 
-    /* ── Navbar ─────────────────────────────────── */
-    nav {
-      background: #1a1a2e; color: #fff;
-      padding: 1rem 2rem;
-      display: flex; align-items: center; justify-content: space-between;
-    }
-    nav .brand { font-size: 1.4rem; font-weight: 700; letter-spacing: 1px; }
-    nav a { color: #e8ff47; text-decoration: none; font-size: 0.9rem; font-weight: 600; }
-    nav a:hover { text-decoration: underline; }
+body{
+  font-family:Arial, sans-serif;
+  background:#0f0f0f;
+  color:#f5f5f5;
+}
 
-    /* ── Hero ───────────────────────────────────── */
-    .hero {
-      background: linear-gradient(135deg, #1a73e8, #0d47a1);
-      color: #fff; text-align: center; padding: 4rem 1rem;
-    }
-    .hero h2 { font-size: 2.2rem; margin-bottom: 0.6rem; }
-    .hero p  { font-size: 1rem; opacity: 0.88; }
+/* ── Header ───────────────────────── */
+header{
+  background:#000;
+  padding:1rem 2rem;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  border-bottom:1px solid #222;
+}
+.logo{
+  font-size:1.6rem;
+  font-weight:700;
+  letter-spacing:1px;
+}
+.cart{
+  font-size:1.2rem;
+  cursor:pointer;
+}
 
-    /* ── Products ───────────────────────────────── */
-    .section { max-width: 1100px; margin: 2.5rem auto; padding: 0 1.5rem; }
-    .section-title {
-      font-size: 1.4rem; font-weight: 700;
-      margin-bottom: 1.5rem;
-      padding-bottom: 0.5rem;
-      border-bottom: 3px solid #1a73e8;
-    }
+/* ── Hero ───────────────────────── */
+.hero{
+  text-align:center;
+  padding:3rem 1rem;
+  background:linear-gradient(135deg,#111,#1c1c1c);
+}
+.hero h2{font-size:2rem;margin-bottom:0.5rem}
+.hero p{color:#bbb}
 
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(195px, 1fr));
-      gap: 1.2rem;
-    }
+/* ── Products ───────────────────── */
+.section{
+  max-width:1100px;
+  margin:2rem auto;
+  padding:0 1.5rem;
+}
+.section-title{
+  font-size:1.4rem;
+  margin-bottom:1.5rem;
+  border-bottom:2px solid #444;
+  padding-bottom:0.5rem;
+}
+.grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(200px,1fr));
+  gap:1.2rem;
+}
+.card{
+  background:#1a1a1a;
+  border:1px solid #2a2a2a;
+  border-radius:10px;
+  padding:1.2rem;
+  text-align:center;
+  transition:0.3s;
+}
+.card:hover{
+  transform:translateY(-5px);
+  box-shadow:0 8px 25px rgba(255,255,255,0.05);
+}
+.icon{font-size:2.5rem;margin-bottom:0.6rem}
+.card h4{margin-bottom:0.4rem}
+.price{color:#00e676;font-weight:700;margin-bottom:0.8rem}
+.btn{
+  background:#fff;
+  color:#000;
+  border:none;
+  padding:0.5rem 1rem;
+  border-radius:5px;
+  cursor:pointer;
+  font-weight:600;
+}
+.btn:hover{background:#ddd}
 
-    .card {
-      background: #fff; border: 1px solid #e0e0e0;
-      border-radius: 10px; padding: 1.5rem 1rem;
-      text-align: center;
-      transition: transform 0.2s, box-shadow 0.2s;
-    }
-    .card:hover { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.10); }
-    .card .icon  { font-size: 2.8rem; margin-bottom: 0.7rem; display: block; line-height: 1; }
-    .card h4     { font-size: 0.95rem; font-weight: 600; margin-bottom: 0.5rem; }
-    .card .price { color: #1a73e8; font-weight: 700; font-size: 1.1rem; margin-bottom: 1rem; }
-    .card .btn {
-      display: inline-block; background: #1a73e8; color: #fff;
-      border: none; border-radius: 6px;
-      padding: 0.5rem 1.2rem; font-size: 0.85rem; font-weight: 600;
-      cursor: pointer; transition: background 0.2s;
-    }
-    .card .btn:hover { background: #1558b0; }
+/* ── Footer ───────────────────── */
+footer{
+  background:#000;
+  padding:1rem;
+  text-align:center;
+  font-size:0.85rem;
+  color:#888;
+  margin-top:3rem;
+}
 
-    /* ── Contact ────────────────────────────────── */
-    .contact-wrap {
-      max-width: 520px; margin: 2rem auto 3rem;
-      background: #fff; border: 1px solid #e0e0e0;
-      border-radius: 10px; padding: 2rem;
-    }
-    .contact-wrap h3  { font-size: 1.3rem; margin-bottom: 0.5rem; }
-    .contact-email    { font-size: 0.9rem; color: #555; margin-bottom: 1.2rem; }
-    .contact-email a  { color: #1a73e8; font-weight: 600; text-decoration: none; }
-    .contact-wrap input,
-    .contact-wrap textarea {
-      width: 100%; padding: 0.65rem 0.85rem;
-      margin-bottom: 0.9rem;
-      border: 1px solid #ccc; border-radius: 6px;
-      font-size: 0.9rem; font-family: Arial, sans-serif;
-      outline: none; transition: border-color 0.2s;
-    }
-    .contact-wrap input:focus,
-    .contact-wrap textarea:focus { border-color: #1a73e8; }
-    .contact-wrap .send-btn {
-      background: #1a1a2e; color: #fff; border: none;
-      border-radius: 6px; padding: 0.7rem 1.8rem;
-      font-size: 0.9rem; font-weight: 600; cursor: pointer;
-      transition: background 0.2s;
-    }
-    .contact-wrap .send-btn:hover { background: #16213e; }
-    .success-msg {
-      color: #2e7d32; font-size: 0.9rem; font-weight: 600;
-      margin-top: 0.8rem; display: none;
-    }
-
-    /* ── Footer ─────────────────────────────────── */
-    footer {
-      background: #1a1a2e; color: #aaa;
-      text-align: center; padding: 1.4rem;
-      font-size: 0.85rem;
-    }
-    footer a { color: #e8ff47; text-decoration: none; }
-
-    /* ── Toast ──────────────────────────────────── */
-    #toast {
-      position: fixed; bottom: 1.5rem; right: 1.5rem;
-      background: #1a1a2e; color: #e8ff47;
-      padding: 0.75rem 1.3rem; border-radius: 8px;
-      font-size: 0.875rem; font-weight: 600;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.3);
-      display: none; z-index: 999;
-    }
-  </style>
+/* ── Toast ───────────────────── */
+#toast{
+  position:fixed;
+  bottom:20px;
+  right:20px;
+  background:#fff;
+  color:#000;
+  padding:0.7rem 1.2rem;
+  border-radius:6px;
+  display:none;
+  font-weight:600;
+}
+</style>
 </head>
+
 <body>
 
-<!-- ── Navbar ──────────────────────────────────────────────────────────── -->
-<nav>
-  <span class="brand">&#9670; ShopNxt</span>
-  <a href="#contact">Contact Us</a>
-</nav>
+<header>
+  <div class="logo">ShopNxt</div>
+  <div class="cart">🛒</div>
+</header>
 
-<!-- ── Hero ────────────────────────────────────────────────────────────── -->
 <div class="hero">
   <h2>Welcome to ShopNxt</h2>
-  <p>Simple shopping. Great products. Quick delivery.</p>
+  <p>Premium products. Dark aesthetics. Smooth shopping.</p>
 </div>
 
-<!-- ── Products ────────────────────────────────────────────────────────── -->
 <div class="section">
   <div class="section-title">Our Products</div>
   <div class="grid">
-    {% for p in products %}
+
     <div class="card">
-      <span class="icon">{{ p.icon | safe }}</span>
-      <h4>{{ p.name }}</h4>
-      <div class="price">${{ "%.2f" | format(p.price) }}</div>
-      <button class="btn" onclick="addToCart('{{ p.name }}')">Add to Cart</button>
+      <div class="icon">⌚</div>
+      <h4>Smart Watch</h4>
+      <div class="price">$149.99</div>
+      <button class="btn" onclick="addToCart('Smart Watch')">Add to Cart</button>
     </div>
-    {% endfor %}
+
+    <div class="card">
+      <div class="icon">🎧</div>
+      <h4>Wireless Headphones</h4>
+      <div class="price">$89.99</div>
+      <button class="btn" onclick="addToCart('Wireless Headphones')">Add to Cart</button>
+    </div>
+
+    <div class="card">
+      <div class="icon">📱</div>
+      <h4>Smartphone</h4>
+      <div class="price">$699.99</div>
+      <button class="btn" onclick="addToCart('Smartphone')">Add to Cart</button>
+    </div>
+
+    <div class="card">
+      <div class="icon">💻</div>
+      <h4>Laptop</h4>
+      <div class="price">$999.99</div>
+      <button class="btn" onclick="addToCart('Laptop')">Add to Cart</button>
+    </div>
+
+    <div class="card">
+      <div class="icon">📷</div>
+      <h4>Camera</h4>
+      <div class="price">$549.99</div>
+      <button class="btn" onclick="addToCart('Camera')">Add to Cart</button>
+    </div>
+
+    <div class="card">
+      <div class="icon">🎮</div>
+      <h4>Gaming Console</h4>
+      <div class="price">$399.99</div>
+      <button class="btn" onclick="addToCart('Gaming Console')">Add to Cart</button>
+    </div>
+
+    <div class="card">
+      <div class="icon">⌨️</div>
+      <h4>Mechanical Keyboard</h4>
+      <div class="price">$129.99</div>
+      <button class="btn" onclick="addToCart('Mechanical Keyboard')">Add to Cart</button>
+    </div>
+
+    <div class="card">
+      <div class="icon">🖱️</div>
+      <h4>Wireless Mouse</h4>
+      <div class="price">$49.99</div>
+      <button class="btn" onclick="addToCart('Wireless Mouse')">Add to Cart</button>
+    </div>
+
+    <div class="card">
+      <div class="icon">📺</div>
+      <h4>Smart TV</h4>
+      <div class="price">$799.99</div>
+      <button class="btn" onclick="addToCart('Smart TV')">Add to Cart</button>
+    </div>
+
+    <div class="card">
+      <div class="icon">🔊</div>
+      <h4>Bluetooth Speaker</h4>
+      <div class="price">$59.99</div>
+      <button class="btn" onclick="addToCart('Bluetooth Speaker')">Add to Cart</button>
+    </div>
+
   </div>
 </div>
 
-<!-- ── Contact ──────────────────────────────────────────────────────────── -->
-<div class="contact-wrap" id="contact">
-  <h3>Contact Us</h3>
-  <div class="contact-email">
-    &#128231;&nbsp;
-    <a href="mailto:surya.shopnxt@mail.com">surya.shopnxt@mail.com</a>
-  </div>
-  <input  type="text"  id="cname"    placeholder="Your name"    />
-  <input  type="email" id="cemail"   placeholder="Your email"   />
-  <textarea             id="cmsg"    rows="4" placeholder="Your message"></textarea>
-  <button class="send-btn" onclick="sendMsg()">Send Message</button>
-  <div class="success-msg" id="successMsg">
-    &#10003; Message sent! We will get back to you soon.
-  </div>
-</div>
-
-<!-- ── Footer ──────────────────────────────────────────────────────────── -->
 <footer>
-  &copy; 2025 ShopNxt &nbsp;|&nbsp;
-  <a href="mailto:surya.shopnxt@mail.com">surya.shopnxt@mail.com</a>
+  © 2026 ShopNxt | Premium Dark Store Experience
 </footer>
 
-<!-- ── Toast ───────────────────────────────────────────────────────────── -->
 <div id="toast"></div>
 
 <script>
-  function addToCart(name) {
-    var t = document.getElementById("toast");
-    t.textContent = "Added: " + name;
-    t.style.display = "block";
-    clearTimeout(t._timer);
-    t._timer = setTimeout(function () { t.style.display = "none"; }, 2500);
-  }
-
-  function sendMsg() {
-    var name  = document.getElementById("cname").value.trim();
-    var email = document.getElementById("cemail").value.trim();
-    var msg   = document.getElementById("cmsg").value.trim();
-    if (!name || !email || !msg) { alert("Please fill in all fields."); return; }
-    document.getElementById("successMsg").style.display = "block";
-    document.getElementById("cname").value  = "";
-    document.getElementById("cemail").value = "";
-    document.getElementById("cmsg").value   = "";
-  }
+function addToCart(name){
+  var t=document.getElementById("toast");
+  t.textContent="Added: "+name;
+  t.style.display="block";
+  clearTimeout(t._timer);
+  t._timer=setTimeout(function(){t.style.display="none";},2000);
+}
 </script>
 
 </body>
 </html>
-
