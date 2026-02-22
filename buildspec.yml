@@ -3,7 +3,7 @@ version: 0.2
 env:
   variables:
     IMAGE_REPO_NAME: shopnxt-app
-    CONTAINER_NAME: shopnxt-app   # IMPORTANT: Must match ECS container name EXACTLY
+    CONTAINER_NAME: shopnxt-container   # IMPORTANT: Must match ECS container name EXACTLY
 
 phases:
 
@@ -52,3 +52,4 @@ artifacts:
   files:
     - imagedefinitions.json
   discard-paths: yes
+
