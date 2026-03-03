@@ -2,7 +2,7 @@
 # Owner : Surya | samsurya899@gmail.com
 # Port  : 5000
 # ──────────────────────────────────────────────────────────────────────────────
-FROM python:3.12-slim
+FROM public.ecr.aws/docker/library/python:3.12-slim
 
 # FIX 1: Set UTF-8 locale explicitly.
 #         python:3.12-slim ships with NO locale → gunicorn raises
@@ -47,4 +47,5 @@ CMD ["gunicorn", \
      "--error-logfile", "-", \
      "--log-level", "info", \
      "app:app"]
+
 
