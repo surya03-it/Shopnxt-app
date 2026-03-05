@@ -1,0 +1,382 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  ShopNxt | Stack 1 - VPC & Network
+  Region  : eu-west-1
+  Owner   : Surya
+  GitHub  : https://github.com/surya03-it/Shopnxt-app
+
+# ── Parameters ─────────────────────────────────────────────────────────────────
+Parameters:
+  AppName:
+    Type: String
+    Default: shopnxt
+    Description: Application name prefix for all resources
+
+  Environment:
+    Type: String
+    Default: production
+    AllowedValues: [production, staging, development]
+
+# ── Common Tags ────────────────────────────────────────────────────────────────
+# Applied to every resource via Tags block
+# Owner: Surya | Project: ShopNxt | Repo: surya03-it/Shopnxt-app
+
+Resources:
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # VPC
+  # ════════════════════════════════════════════════════════════════════════════
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-vpc"
+        - Key: Owner
+          Value: Surya
+        - Key: Project
+          Value: ShopNxt
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # Internet Gateway
+  # ════════════════════════════════════════════════════════════════════════════
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-igw"
+        - Key: Owner
+          Value: Surya
+        - Key: Project
+          Value: ShopNxt
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  IGWAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # Public Subnets — ALB lives here (2 AZs for High Availability)
+  # ════════════════════════════════════════════════════════════════════════════
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: eu-west-1a
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-public-subnet-1a"
+        - Key: Owner
+          Value: Surya
+        - Key: Project
+          Value: ShopNxt
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Tier
+          Value: Public
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: eu-west-1b
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-public-subnet-1b"
+        - Key: Owner
+          Value: Surya
+        - Key: Project
+          Value: ShopNxt
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Tier
+          Value: Public
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # Private Subnets — ECS Fargate lives here (no public IP)
+  # ════════════════════════════════════════════════════════════════════════════
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.3.0/24
+      AvailabilityZone: eu-west-1a
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-private-subnet-1a"
+        - Key: Owner
+          Value: Surya
+        - Key: Project
+          Value: ShopNxt
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Tier
+          Value: Private
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.4.0/24
+      AvailabilityZone: eu-west-1b
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-private-subnet-1b"
+        - Key: Owner
+          Value: Surya
+        - Key: Project
+          Value: ShopNxt
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Tier
+          Value: Private
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # NAT Gateway — allows ECS in private subnet to pull ECR images outbound
+  # Single NAT saves cost (~$32/month vs two NATs)
+  # ════════════════════════════════════════════════════════════════════════════
+  ElasticIP:
+    Type: AWS::EC2::EIP
+    DependsOn: IGWAttachment
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-nat-eip"
+        - Key: Owner
+          Value: Surya
+        - Key: Project
+          Value: ShopNxt
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  NATGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt ElasticIP.AllocationId
+      SubnetId: !Ref PublicSubnet1
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-nat-gateway"
+        - Key: Owner
+          Value: Surya
+        - Key: Project
+          Value: ShopNxt
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # Route Tables
+  # ════════════════════════════════════════════════════════════════════════════
+
+  # Public Route Table → Internet Gateway
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-public-rt"
+        - Key: Owner
+          Value: Surya
+        - Key: Project
+          Value: ShopNxt
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: IGWAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnet2RouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  # Private Route Table → NAT Gateway
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-private-rt"
+        - Key: Owner
+          Value: Surya
+        - Key: Project
+          Value: ShopNxt
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NATGateway
+
+  PrivateSubnet1RouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnet2RouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # Security Groups
+  # ════════════════════════════════════════════════════════════════════════════
+
+  # ALB Security Group — accepts HTTP/HTTPS from internet (CloudFront)
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "${AppName}-alb-sg"
+      GroupDescription: "ShopNxt ALB - allow HTTP 80 and HTTPS 443 from internet"
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: "HTTP from internet"
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: "HTTPS from internet"
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: "Allow all outbound"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-alb-sg"
+        - Key: Owner
+          Value: Surya
+        - Key: Project
+          Value: ShopNxt
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # ECS Security Group — accepts port 5000 ONLY from ALB (no direct internet access)
+  ECSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "${AppName}-ecs-sg"
+      GroupDescription: "ShopNxt ECS - allow port 5000 only from ALB"
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5000
+          ToPort: 5000
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+          Description: "Flask app port from ALB only"
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: "Allow all outbound for ECR image pull via NAT"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-ecs-sg"
+        - Key: Owner
+          Value: Surya
+        - Key: Project
+          Value: ShopNxt
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+# ── Outputs (imported by Stack 3, 4) ──────────────────────────────────────────
+Outputs:
+
+  VpcId:
+    Description: VPC ID
+    Value: !Ref VPC
+    Export:
+      Name: !Sub "${AppName}-vpc-id"
+
+  PublicSubnet1:
+    Description: Public Subnet AZ1 (ALB)
+    Value: !Ref PublicSubnet1
+    Export:
+      Name: !Sub "${AppName}-public-subnet-1"
+
+  PublicSubnet2:
+    Description: Public Subnet AZ2 (ALB)
+    Value: !Ref PublicSubnet2
+    Export:
+      Name: !Sub "${AppName}-public-subnet-2"
+
+  PrivateSubnet1:
+    Description: Private Subnet AZ1 (ECS)
+    Value: !Ref PrivateSubnet1
+    Export:
+      Name: !Sub "${AppName}-private-subnet-1"
+
+  PrivateSubnet2:
+    Description: Private Subnet AZ2 (ECS)
+    Value: !Ref PrivateSubnet2
+    Export:
+      Name: !Sub "${AppName}-private-subnet-2"
+
+  ALBSecurityGroup:
+    Description: ALB Security Group ID
+    Value: !Ref ALBSecurityGroup
+    Export:
+      Name: !Sub "${AppName}-alb-sg-id"
+
+  ECSSecurityGroup:
+    Description: ECS Security Group ID
+    Value: !Ref ECSSecurityGroup
+    Export:
+      Name: !Sub "${AppName}-ecs-sg-id"

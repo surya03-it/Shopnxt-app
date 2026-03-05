@@ -1,0 +1,105 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  ShopNxt | Stack WAF-5a - WAF for CloudFront + SSM Replication
+  Region  : us-east-1 (WAF Scope CLOUDFRONT must be us-east-1)
+  Owner   : Surya
+  GitHub  : https://github.com/surya03-it/Shopnxt-app
+
+# ── Parameters ─────────────────────────────────────────────────────────────────
+Parameters:
+  AppName:
+    Type: String
+    Default: shopnxt
+
+  # ✅ ALB DNS — Console-ல deploy பண்ணும்போது இந்த field-ல paste பண்ணு
+  # How to get:
+  #   AWS Console → eu-west-1 → CloudFormation
+  #   → Stack-3-ALB → Outputs → ALBDNSName → value copy பண்ணு
+  # Example: shopnxt-alb-xxxxxxx.eu-west-1.elb.amazonaws.com
+  ALBDnsName:
+    Type: String
+    Description: >
+      ALB DNS from Stack-3-ALB (eu-west-1).
+      Stack-3-ALB → Outputs → ALBDNSName → copy value → paste here.
+
+# ── Resources ──────────────────────────────────────────────────────────────────
+Resources:
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # WAF WebACL — CloudFront Protection
+  # ════════════════════════════════════════════════════════════════════════════
+  ShopNxtWAF:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: !Sub "${AppName}-cloudfront-waf"
+      Scope: CLOUDFRONT
+      DefaultAction:
+        Allow: {}
+      Description: ShopNxt WAF CloudFront Protection
+
+      VisibilityConfig:
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: !Sub "${AppName}-waf"
+
+      Rules:
+
+        - Name: AWSManagedCommonRuleSet
+          Priority: 1
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesCommonRuleSet
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: CommonRuleSet
+
+        - Name: RateLimitRule
+          Priority: 2
+          Action:
+            Block: {}
+          Statement:
+            RateBasedStatement:
+              Limit: 2000
+              AggregateKeyType: IP
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: RateLimit
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # ✅ SSM Parameter — ALB DNS us-east-1-ல store பண்ணு
+  # Stack-6-CloudFront இதை same region-ல auto-fetch பண்ணும்
+  # Stack-3b-SSM separate stack தேவையில்ல!
+  # ════════════════════════════════════════════════════════════════════════════
+  ALBDnsSSMParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/shopnxt/${AppName}-alb-dns-use1"
+      Type: String
+      Value: !Ref ALBDnsName
+      Description: >
+        ShopNxt ALB DNS (eu-west-1) — stored here for CloudFront stack (us-east-1).
+      Tags:
+        Name: !Sub "${AppName}-alb-dns-ssm"
+        Owner: Surya
+        Project: ShopNxt
+        ManagedBy: CloudFormation
+
+# ── Outputs ────────────────────────────────────────────────────────────────────
+Outputs:
+
+  ShopNxtWebACLArn:
+    Description: Web ACL ARN for CloudFront
+    Value: !GetAtt ShopNxtWAF.Arn
+    Export:
+      Name: ShopNxt-WebACL-Arn
+
+  ALBDnsSSMParameterName:
+    Description: SSM Parameter name (auto-used by Stack-6-CloudFront)
+    Value: !Sub "/shopnxt/${AppName}-alb-dns-use1"
+    Export:
+      Name: !Sub "${AppName}-alb-dns-ssm-use1"

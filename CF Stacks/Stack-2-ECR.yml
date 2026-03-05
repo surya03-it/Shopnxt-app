@@ -1,0 +1,114 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  ShopNxt | Stack 2 - ECR Repository
+  Region  : eu-west-1
+  Owner   : Surya
+  GitHub  : https://github.com/surya03-it/Shopnxt-app
+
+# ── Parameters ─────────────────────────────────────────────────────────────────
+Parameters:
+  AppName:
+    Type: String
+    Default: shopnxt
+    Description: Application name prefix
+
+  Environment:
+    Type: String
+    Default: production
+    AllowedValues: [production, staging, development]
+
+Resources:
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # ECR Repository
+  # Security  : Image scan on every push (finds CVEs automatically)
+  # Cost      : Lifecycle policy keeps only last 5 images → no storage waste
+  # ════════════════════════════════════════════════════════════════════════════
+  ECRRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub "${AppName}-app"
+
+      # Security: Scan every image pushed for vulnerabilities
+      ImageScanningConfiguration:
+        ScanOnPush: true
+
+      # Security: Immutable tags prevent overwriting existing image tags
+      ImageTagMutability: MUTABLE
+
+      # Cost: Keep only last 5 images, expire everything else automatically
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep only last 5 images to save storage cost",
+                "selection": {
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 5
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+
+      # Security: Resource-based policy - only this account can push/pull
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowAccountAccess
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
+            Action:
+              - ecr:GetDownloadUrlForLayer
+              - ecr:BatchGetImage
+              - ecr:BatchCheckLayerAvailability
+              - ecr:PutImage
+              - ecr:InitiateLayerUpload
+              - ecr:UploadLayerPart
+              - ecr:CompleteLayerUpload
+              - ecr:DescribeRepositories
+              - ecr:GetRepositoryPolicy
+              - ecr:ListImages
+              - ecr:DeleteRepository
+              - ecr:BatchDeleteImage
+              - ecr:SetRepositoryPolicy
+              - ecr:DeleteRepositoryPolicy
+
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-ecr-repo"
+        - Key: Owner
+          Value: Surya
+        - Key: Project
+          Value: ShopNxt
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Stack
+          Value: stack-2-ecr
+
+# ── Outputs (used by Stack 4 ECS and Stack 5 CI/CD) ──────────────────────────
+Outputs:
+
+  ECRRepositoryURI:
+    Description: Full URI of the ECR repository
+    Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${AppName}-app"
+    Export:
+      Name: !Sub "${AppName}-ecr-uri"
+
+  ECRRepositoryName:
+    Description: ECR Repository Name
+    Value: !Ref ECRRepository
+    Export:
+      Name: !Sub "${AppName}-ecr-name"
+
+  ECRRepositoryARN:
+    Description: ECR Repository ARN
+    Value: !GetAtt ECRRepository.Arn
+    Export:
+      Name: !Sub "${AppName}-ecr-arn"

@@ -1,0 +1,740 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  ShopNxt | Stack 5 - CodePipeline CI/CD
+  Flow : GitHub push -> CodeBuild (docker build + ECR push) -> Security Tests (Safety + Bandit) -> ManualApproval -> ECS rolling deploy
+  Port : 5000
+  Owner: Surya | samsurya899@gmail.com
+  Repo : https://github.com/surya03-it/Shopnxt-app
+  Region: eu-west-1
+  Requires: Stack 1 (VPC) + Stack 2 (ECR) + Stack 3 (ALB) + Stack 4 (ECS)
+
+Parameters:
+
+  AppName:
+    Type: String
+    Default: shopnxt
+    Description: Must match AppName in stacks 1-4
+
+  Environment:
+    Type: String
+    Default: production
+    AllowedValues: [production, staging, development]
+
+  GitHubOwner:
+    Type: String
+    Default: surya03-it
+    Description: GitHub username that owns the repository
+
+  GitHubRepo:
+    Type: String
+    Default: Shopnxt-app
+    Description: GitHub repository name (case-sensitive)
+
+  GitHubBranch:
+    Type: String
+    Default: main
+    Description: Branch to watch - pipeline triggers on every push to this branch
+
+  GitHubToken:
+    Type: String
+    NoEcho: true
+    Description: >
+      GitHub Personal Access Token with repo scope.
+      Paste the full token value here - it will be hidden (NoEcho).
+
+  WebhookSecret:
+    Type: String
+    NoEcho: true
+    Default: shopnxt-webhook-secret-2025
+    Description: Secret string used to verify GitHub webhook payloads.
+
+  NotificationEmail:
+    Type: String
+    Default: samsurya899@gmail.com
+    Description: Email for pipeline SUCCEEDED and FAILED alerts
+
+Resources:
+
+  # ???????????????????????????????????????????????????????????????????????????
+  # S3 ARTIFACT BUCKET
+  # ???????????????????????????????????????????????????????????????????????????
+  ArtifactBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${AppName}-pipeline-artifacts-${AWS::AccountId}"
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldArtifacts
+            Status: Enabled
+            ExpirationInDays: 7
+          - Id: DeleteOldVersions
+            Status: Enabled
+            NoncurrentVersionExpirationInDays: 3
+      Tags:
+        - { Key: Name,        Value: !Sub "${AppName}-pipeline-artifacts" }
+        - { Key: Owner,       Value: Surya }
+        - { Key: Project,     Value: ShopNxt }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: ManagedBy,   Value: CloudFormation }
+        - { Key: Stack,       Value: stack-5-codepipeline }
+
+  ArtifactBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ArtifactBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyNonSSL
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt ArtifactBucket.Arn
+              - !Sub "${ArtifactBucket.Arn}/*"
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
+  # ???????????????????????????????????????????????????????????????????????????
+  # SNS TOPIC - Pipeline Notifications
+  # ???????????????????????????????????????????????????????????????????????????
+  PipelineSNS:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${AppName}-pipeline-alerts"
+      Subscription:
+        - Protocol: email
+          Endpoint: !Ref NotificationEmail
+      Tags:
+        - { Key: Name,        Value: !Sub "${AppName}-pipeline-alerts" }
+        - { Key: Owner,       Value: Surya }
+        - { Key: Project,     Value: ShopNxt }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Contact,     Value: samsurya899@gmail.com }
+        - { Key: ManagedBy,   Value: CloudFormation }
+        - { Key: Stack,       Value: stack-5-codepipeline }
+
+  PipelineSNSPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref PipelineSNS
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowEventBridge
+            Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sns:Publish
+            Resource: !Ref PipelineSNS
+
+  # ???????????????????????????????????????????????????????????????????????????
+  # CLOUDWATCH LOG GROUP - CodeBuild logs (7-day retention)
+  # ???????????????????????????????????????????????????????????????????????????
+  CodeBuildLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/codebuild/${AppName}"
+      RetentionInDays: 7
+      Tags:
+        - { Key: Name,      Value: !Sub "${AppName}-codebuild-logs" }
+        - { Key: Owner,     Value: Surya }
+        - { Key: Project,   Value: ShopNxt }
+        - { Key: ManagedBy, Value: CloudFormation }
+        - { Key: Stack,     Value: stack-5-codepipeline }
+
+  # ???????????????????????????????????????????????????????????????????????????
+  # CLOUDWATCH LOG GROUP - Security Test logs (7-day retention)
+  # ???????????????????????????????????????????????????????????????????????????
+  SecurityTestLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/codebuild/${AppName}-security-test"
+      RetentionInDays: 7
+      Tags:
+        - { Key: Name,      Value: !Sub "${AppName}-security-test-logs" }
+        - { Key: Owner,     Value: Surya }
+        - { Key: Project,   Value: ShopNxt }
+        - { Key: ManagedBy, Value: CloudFormation }
+        - { Key: Stack,     Value: stack-5-codepipeline }
+
+  # ???????????????????????????????????????????????????????????????????????????
+  # IAM ROLE - CodeBuild
+  # ???????????????????????????????????????????????????????????????????????????
+  CodeBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AppName}-codebuild-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub "${AppName}-codebuild-policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+
+              - Sid: CloudWatchLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !GetAtt CodeBuildLogGroup.Arn
+                  - !Sub "${CodeBuildLogGroup.Arn}:*"
+                  - !GetAtt SecurityTestLogGroup.Arn
+                  - !Sub "${SecurityTestLogGroup.Arn}:*"
+
+              - Sid: S3Artifacts
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:PutObject
+                  - s3:GetBucketAcl
+                  - s3:GetBucketLocation
+                Resource:
+                  - !GetAtt ArtifactBucket.Arn
+                  - !Sub "${ArtifactBucket.Arn}/*"
+
+              - Sid: ECRAuth
+                Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                Resource: "*"
+
+              - Sid: ECRPush
+                Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - ecr:PutImage
+                  - ecr:InitiateLayerUpload
+                  - ecr:UploadLayerPart
+                  - ecr:CompleteLayerUpload
+                  - ecr:DescribeImages
+                  - ecr:ListImages
+                Resource:
+                  - !ImportValue
+                    Fn::Sub: "${AppName}-ecr-arn"
+
+      Tags:
+        - { Key: Name,        Value: !Sub "${AppName}-codebuild-role" }
+        - { Key: Owner,       Value: Surya }
+        - { Key: Project,     Value: ShopNxt }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: ManagedBy,   Value: CloudFormation }
+        - { Key: Stack,       Value: stack-5-codepipeline }
+
+  # ???????????????????????????????????????????????????????????????????????????
+  # CODEBUILD PROJECT
+  # ???????????????????????????????????????????????????????????????????????????
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub "${AppName}-build"
+      Description: !Sub "ShopNxt | docker build + ECR push | port 5000 | Owner: Surya"
+      ServiceRole: !GetAtt CodeBuildRole.Arn
+
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: |
+          version: 0.2
+
+          env:
+            variables:
+              IMAGE_REPO_NAME: shopnxt-app
+              CONTAINER_NAME: shopnxt-container
+
+          phases:
+            install:
+              runtime-versions:
+                python: 3.12
+              commands:
+                - echo "Installing dependencies..."
+                - pip install -r requirements.txt
+                - pip install pytest pytest-flask
+
+            pre_build:
+              commands:
+                - echo "Running tests..."
+                - python -m pytest tests/ -v
+                - echo "Logging into Amazon ECR..."
+                - AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+                - AWS_REGION=$AWS_DEFAULT_REGION
+                - IMAGE_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$IMAGE_REPO_NAME
+                - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+                - IMAGE_TAG=$(date +%Y%m%d-%H%M%S)
+                - echo "Image URI $IMAGE_URI"
+                - echo "Image Tag $IMAGE_TAG"
+
+            build:
+              commands:
+                - echo "Building Docker image..."
+                - docker build -t $IMAGE_URI:$IMAGE_TAG .
+                - docker tag $IMAGE_URI:$IMAGE_TAG $IMAGE_URI:latest
+
+            post_build:
+              commands:
+                - echo "Pushing image to ECR..."
+                - docker push $IMAGE_URI:$IMAGE_TAG
+                - docker push $IMAGE_URI:latest
+                - echo "Creating imagedefinitions.json..."
+                - printf '[{"name":"%s","imageUri":"%s"}]' "$CONTAINER_NAME" "$IMAGE_URI:$IMAGE_TAG" > imagedefinitions.json
+                - cat imagedefinitions.json
+
+          artifacts:
+            files:
+              - imagedefinitions.json
+            discard-paths: yes
+
+      Artifacts:
+        Type: CODEPIPELINE
+
+      Cache:
+        Type: LOCAL
+        Modes:
+          - LOCAL_DOCKER_LAYER_CACHE
+          - LOCAL_SOURCE_CACHE
+
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:7.0
+        PrivilegedMode: true
+
+      TimeoutInMinutes: 15
+
+      LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
+          GroupName: !Ref CodeBuildLogGroup
+          StreamName: build
+
+      Tags:
+        - { Key: Name,        Value: !Sub "${AppName}-codebuild" }
+        - { Key: Owner,       Value: Surya }
+        - { Key: Project,     Value: ShopNxt }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Port,        Value: "5000" }
+        - { Key: ManagedBy,   Value: CloudFormation }
+        - { Key: Stack,       Value: stack-5-codepipeline }
+
+  # ???????????????????????????????????????????????????????????????????????????
+  # CODEBUILD PROJECT - Security & Vulnerability Tests
+  # Runs: safety (dependency CVE check) + bandit (SAST for Python)
+  # Input : SourceOutput (raw source code from GitHub)
+  # Output: security-report.txt (uploaded as artifact)
+  # ???????????????????????????????????????????????????????????????????????????
+  SecurityTestProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub "${AppName}-security-test"
+      Description: !Sub "ShopNxt | Vulnerability checks: Safety + Bandit | Python Flask"
+      ServiceRole: !GetAtt CodeBuildRole.Arn
+
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: |
+          version: 0.2
+
+          phases:
+            install:
+              runtime-versions:
+                python: 3.12
+              commands:
+                - echo "Installing security scanning tools..."
+                - pip install safety bandit
+
+            pre_build:
+              commands:
+                - echo "=============================================="
+                - echo " STEP 1 - Dependency CVE Check (safety)"
+                - echo "=============================================="
+                # safety check scans requirements.txt against known CVE database.
+                # --continue-on-error ensures the build collects all issues
+                # before deciding to fail (bandit results are also considered).
+                - safety check -r requirements.txt --output text > safety-report.txt 2>&1 || true
+                - cat safety-report.txt
+
+            build:
+              commands:
+                - echo "=============================================="
+                - echo " STEP 2 - Static Analysis (bandit SAST)"
+                - echo "=============================================="
+                # -r  : recursive scan of the app directory
+                # -ll : report only MEDIUM and HIGH severity issues
+                # -ii : report only MEDIUM and HIGH confidence issues
+                # --exit-zero : always exit 0 so we capture full output;
+                #               we manually fail on HIGH findings below.
+                - bandit -r . -ll -ii --exit-zero -f txt -o bandit-report.txt 2>&1 || true
+                - cat bandit-report.txt
+
+            post_build:
+              commands:
+                - echo "=============================================="
+                - echo " STEP 3 - Evaluate Results"
+                - echo "=============================================="
+                - cat safety-report.txt bandit-report.txt > security-report.txt
+                # Fail the build if HIGH severity vulnerabilities are found.
+                # This stops the pipeline before ManualApproval / Deploy.
+                - |
+                  if grep -qiE "^(Issue|Severity): (High|CRITICAL)" bandit-report.txt; then
+                    echo "FAILED: HIGH/CRITICAL severity issues found by Bandit!"
+                    exit 1
+                  fi
+                - |
+                  if grep -qi "vulnerability found" safety-report.txt; then
+                    echo "WARNING: Known CVEs found by Safety - review safety-report.txt"
+                  fi
+                - echo "Security scan complete. See security-report.txt for full details."
+
+          artifacts:
+            files:
+              - security-report.txt
+              - safety-report.txt
+              - bandit-report.txt
+            discard-paths: yes
+
+      Artifacts:
+        Type: CODEPIPELINE
+
+      Cache:
+        Type: LOCAL
+        Modes:
+          - LOCAL_SOURCE_CACHE
+
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:7.0
+        PrivilegedMode: false
+
+      TimeoutInMinutes: 10
+
+      LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
+          GroupName: !Ref SecurityTestLogGroup
+          StreamName: security-test
+
+      Tags:
+        - { Key: Name,        Value: !Sub "${AppName}-security-test" }
+        - { Key: Owner,       Value: Surya }
+        - { Key: Project,     Value: ShopNxt }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: ManagedBy,   Value: CloudFormation }
+        - { Key: Stack,       Value: stack-5-codepipeline }
+  PipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AppName}-pipeline-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codepipeline.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub "${AppName}-pipeline-policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+
+              - Sid: S3Artifacts
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:PutObject
+                  - s3:GetBucketVersioning
+                  - s3:GetBucketAcl
+                  - s3:GetBucketLocation
+                Resource:
+                  - !GetAtt ArtifactBucket.Arn
+                  - !Sub "${ArtifactBucket.Arn}/*"
+
+              - Sid: CodeStarConnection
+                Effect: Allow
+                Action:
+                  - codestar-connections:UseConnection
+                Resource: arn:aws:codeconnections:eu-west-1:451124812411:connection/56c80dbd-9afd-4c71-991a-17d4932d3f1b
+
+              - Sid: CodeBuild
+                Effect: Allow
+                Action:
+                  - codebuild:BatchGetBuilds
+                  - codebuild:StartBuild
+                  - codebuild:StopBuild
+                Resource:
+                  - !GetAtt CodeBuildProject.Arn
+                  - !GetAtt SecurityTestProject.Arn
+
+              # SNS - ManualApproval stage sends approval notification email
+              - Sid: SNSApproval
+                Effect: Allow
+                Action: sns:Publish
+                Resource: !Ref PipelineSNS
+
+              # ECS - every action called by CodePipeline ECS deploy provider
+              # RegisterTaskDefinition  - creates new task def with updated image
+              # UpdateService           - points service to new task def revision
+              # DescribeServices        - polls until deployment is stable
+              # DescribeTaskDefinition  - reads current task def to clone it
+              # DescribeTasks / ListTasks - checks health of running tasks
+              # ListTaskDefinitions     - finds current revision number
+              # TagResource             - tags new task def revision (REQUIRED)
+              # ListTagsForResource     - reads existing tags before update
+              # UntagResource           - removes stale tags
+              - Sid: ECSDeployProvider
+                Effect: Allow
+                Action:
+                  - ecs:RegisterTaskDefinition
+                  - ecs:UpdateService
+                  - ecs:DescribeServices
+                  - ecs:DescribeTaskDefinition
+                  - ecs:DescribeTasks
+                  - ecs:ListTasks
+                  - ecs:ListTaskDefinitions
+                  - ecs:TagResource
+                  - ecs:ListTagsForResource
+                  - ecs:UntagResource
+                Resource: "*"
+
+              # IAM: PassRole + GetRole
+              # PassRole - passes TaskExecutionRole and TaskRole to ECS
+              # GetRole  - CodePipeline calls this FIRST to verify the roles
+              #            exist before attempting to pass them. Without it,
+              #            the deploy stage fails with "not sufficient permissions"
+              - Sid: IAMRoles
+                Effect: Allow
+                Action:
+                  - iam:PassRole
+                  - iam:GetRole
+                Resource: "*"
+                Condition:
+                  StringEqualsIfExists:
+                    iam:PassedToService:
+                      - ecs-tasks.amazonaws.com
+
+              - Sid: SNSPublish
+                Effect: Allow
+                Action: sns:Publish
+                Resource: !Ref PipelineSNS
+
+      Tags:
+        - { Key: Name,        Value: !Sub "${AppName}-pipeline-role" }
+        - { Key: Owner,       Value: Surya }
+        - { Key: Project,     Value: ShopNxt }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: ManagedBy,   Value: CloudFormation }
+        - { Key: Stack,       Value: stack-5-codepipeline }
+
+  # ???????????????????????????????????????????????????????????????????????????
+  # CODEPIPELINE
+  # ???????????????????????????????????????????????????????????????????????????
+  Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: !Sub "${AppName}-pipeline"
+      RoleArn: !GetAtt PipelineRole.Arn
+      # V2 enables native GitHub trigger support via CodeStar connection.
+      # V1 relied on auto-created EventBridge rules which silently fail to
+      # register - causing push events to never trigger the pipeline.
+      PipelineType: V2
+      # Explicit Triggers block tells CodePipeline exactly which connection,
+      # repo and branch to watch. This replaces DetectChanges in Source config.
+      Triggers:
+        - ProviderType: CodeStarSourceConnection
+          GitConfiguration:
+            SourceActionName: GitHub-Source
+            Push:
+              - Branches:
+                  Includes:
+                    - !Ref GitHubBranch
+      ArtifactStore:
+        Type: S3
+        Location: !Ref ArtifactBucket
+      Stages:
+
+        - Name: Source
+          Actions:
+            - Name: GitHub-Source
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeStarSourceConnection
+                Version: "1"
+              Configuration:
+                ConnectionArn: arn:aws:codeconnections:eu-west-1:451124812411:connection/56c80dbd-9afd-4c71-991a-17d4932d3f1b
+                FullRepositoryId: !Sub "${GitHubOwner}/${GitHubRepo}"
+                BranchName: !Ref GitHubBranch
+                OutputArtifactFormat: CODE_ZIP
+              OutputArtifacts:
+                - Name: SourceOutput
+              RunOrder: 1
+
+        - Name: Build
+          Actions:
+            - Name: Docker-Build-Push-ECR
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: "1"
+              Configuration:
+                ProjectName: !Ref CodeBuildProject
+              InputArtifacts:
+                - Name: SourceOutput
+              OutputArtifacts:
+                - Name: BuildOutput
+              RunOrder: 1
+
+        # ----------------------------------------------------------------
+        # TEST STAGE - Vulnerability & Security checks
+        # Uses SourceOutput (raw source) so scans run on the actual code,
+        # independent of the Docker image that was built.
+        # Produces SecurityTestOutput with the scan report artifacts.
+        # ----------------------------------------------------------------
+        - Name: Test
+          Actions:
+            - Name: Security-Vulnerability-Scan
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: "1"
+              Configuration:
+                ProjectName: !Ref SecurityTestProject
+              InputArtifacts:
+                - Name: SourceOutput
+              OutputArtifacts:
+                - Name: SecurityTestOutput
+              RunOrder: 1
+
+        # ----------------------------------------------------------------
+        # MANUAL APPROVAL - Human gate before production deploy.
+        # Sends an email via SNS to NotificationEmail with a review link.
+        # Pipeline waits here until approved or rejected.
+        # ----------------------------------------------------------------
+        - Name: ManualApproval
+          Actions:
+            - Name: Approve-Before-Deploy
+              ActionTypeId:
+                Category: Approval
+                Owner: AWS
+                Provider: Manual
+                Version: "1"
+              Configuration:
+                NotificationArn: !Ref PipelineSNS
+                CustomData: !Sub >
+                  ShopNxt deploy to ${Environment} is pending your approval.
+                  Review the security scan report in the Test stage artifacts
+                  before approving. Pipeline: ${AppName}-pipeline.
+                ExternalEntityLink: !Sub "https://${AWS::Region}.console.aws.amazon.com/codesuite/codepipeline/pipelines/${AppName}-pipeline/view"
+              RunOrder: 1
+
+        - Name: Deploy
+          Actions:
+            - Name: ECS-Rolling-Deploy
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: ECS
+                Version: "1"
+              Configuration:
+                ClusterName: !ImportValue
+                  Fn::Sub: "${AppName}-cluster-name"
+                ServiceName: !ImportValue
+                  Fn::Sub: "${AppName}-service-name"
+                FileName: imagedefinitions.json
+              InputArtifacts:
+                - Name: BuildOutput
+              RunOrder: 1
+
+      Tags:
+        - { Key: Name,        Value: !Sub "${AppName}-pipeline" }
+        - { Key: Owner,       Value: Surya }
+        - { Key: Project,     Value: ShopNxt }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Port,        Value: "5000" }
+        - { Key: ManagedBy,   Value: CloudFormation }
+        - { Key: Stack,       Value: stack-5-codepipeline }
+
+  # ???????????????????????????????????????????????????????????????????????????
+  # EVENTBRIDGE RULE - Pipeline Notifications
+  # ???????????????????????????????????????????????????????????????????????????
+  PipelineEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "${AppName}-pipeline-events"
+      Description: "ShopNxt pipeline SUCCEEDED/FAILED -> email Surya"
+      EventPattern:
+        source:
+          - aws.codepipeline
+        detail-type:
+          - CodePipeline Pipeline Execution State Change
+        detail:
+          pipeline:
+            - !Ref Pipeline
+          state:
+            - SUCCEEDED
+            - FAILED
+      State: ENABLED
+      Targets:
+        - Arn: !Ref PipelineSNS
+          Id: NotifySurya
+
+Outputs:
+
+  PipelineName:
+    Description: CodePipeline name
+    Value: !Ref Pipeline
+    Export:
+      Name: !Sub "${AppName}-pipeline-name"
+
+  CodeBuildProjectName:
+    Description: CodeBuild project name
+    Value: !Ref CodeBuildProject
+    Export:
+      Name: !Sub "${AppName}-codebuild-name"
+
+  SecurityTestProjectName:
+    Description: Security test CodeBuild project name
+    Value: !Ref SecurityTestProject
+    Export:
+      Name: !Sub "${AppName}-security-test-name"
+
+  ArtifactBucketName:
+    Description: S3 artifact bucket
+    Value: !Ref ArtifactBucket
+    Export:
+      Name: !Sub "${AppName}-artifact-bucket"
+
+  PipelineConsoleURL:
+    Description: Direct link to pipeline in AWS Console
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/codesuite/codepipeline/pipelines/${AppName}-pipeline/view"
+
+  CodeBuildConsoleURL:
+    Description: Direct link to CodeBuild in AWS Console
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/codesuite/codebuild/${AWS::AccountId}/projects/${AppName}-build"

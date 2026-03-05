@@ -1,0 +1,112 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  ShopNxt | Stack 6 - CloudFront Distribution with WAF
+  Region  : us-east-1 (CloudFront is global)
+  Owner   : Surya
+  GitHub  : https://github.com/surya03-it/Shopnxt-app
+
+# ── Parameters ─────────────────────────────────────────────────────────────────
+Parameters:
+  AppName:
+    Type: String
+    Default: shopnxt
+    Description: Application name prefix
+
+  # ✅ ALB DNS — SSM Parameter Store வழியா auto-fetch (no hardcode!)
+  # Stack-3b-SSM-Replication (us-east-1) deploy ஆனதும் auto-ready ஆகும்
+  ALBDnsName:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /shopnxt/shopnxt-alb-dns-use1
+    Description: >
+      Auto-fetched from SSM Parameter Store (us-east-1).
+      Default value மாத்த வேண்டாம்.
+
+  # ✅ WAF WebACL ARN — Console-ல deploy பண்ணும்போது இந்த field-ல paste பண்ணு
+  # How to get:
+  #   AWS Console → us-east-1 → WAF & Shield → Web ACLs
+  #   → shopnxt-cloudfront-waf → Overview tab → ARN copy பண்ணு
+  # Format: arn:aws:wafv2:us-east-1:ACCOUNT_ID:global/webacl/shopnxt-cloudfront-waf/xxxxx
+  WebACLArn:
+    Type: String
+    Description: >
+      WAF WebACL ARN — Console-ல deploy பண்ணும்போது fill பண்ணு.
+      AWS Console → us-east-1 → WAF & Shield → Web ACLs → shopnxt-cloudfront-waf → Overview → ARN.
+
+# ── Resources ──────────────────────────────────────────────────────────────────
+Resources:
+
+  ShopNxtCloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub "${AppName} Secure CloudFront Distribution"
+
+        Origins:
+          - Id: shopnxt-alb-origin
+            # ✅ SSM வழியா auto-fetch — no hardcode!
+            DomainName: !Ref ALBDnsName
+            CustomOriginConfig:
+              HTTPPort: 80
+              HTTPSPort: 443
+              OriginProtocolPolicy: http-only
+              OriginSSLProtocols:
+                - TLSv1.2
+
+        DefaultCacheBehavior:
+          TargetOriginId: shopnxt-alb-origin
+          ViewerProtocolPolicy: redirect-to-https
+          Compress: true
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+            - PUT
+            - POST
+            - PATCH
+            - DELETE
+          CachedMethods:
+            - GET
+            - HEAD
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+          OriginRequestPolicyId: 216adef6-5c7f-47e4-b989-5492eafa07d3
+
+        PriceClass: PriceClass_100
+
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
+          MinimumProtocolVersion: TLSv1.2_2021
+
+        # ✅ Console-ல fill பண்ணின WAF ARN — no hardcode!
+        WebACLId: !Ref WebACLArn
+
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-cloudfront"
+        - Key: Owner
+          Value: Surya
+        - Key: Project
+          Value: ShopNxt
+        - Key: ManagedBy
+          Value: CloudFormation
+
+# ── Outputs ────────────────────────────────────────────────────────────────────
+Outputs:
+
+  CloudFrontDomainName:
+    Description: CloudFront Distribution Domain Name
+    Value: !GetAtt ShopNxtCloudFrontDistribution.DomainName
+    Export:
+      Name: !Sub "${AppName}-cloudfront-domain"
+
+  CloudFrontDistributionId:
+    Description: CloudFront Distribution ID
+    Value: !Ref ShopNxtCloudFrontDistribution
+    Export:
+      Name: !Sub "${AppName}-cloudfront-id"
+
+  AppURL:
+    Description: ShopNxt Application URL via CloudFront
+    Value: !Sub "https://${ShopNxtCloudFrontDistribution.DomainName}"
+    Export:
+      Name: !Sub "${AppName}-app-url"

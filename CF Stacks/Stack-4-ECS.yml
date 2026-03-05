@@ -1,0 +1,454 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  ShopNxt | Stack 4 - ECS Fargate Cluster + Service + Task (port 5000)
+  Region  : eu-west-1
+  Owner   : Surya
+  GitHub  : https://github.com/surya03-it/Shopnxt-app
+  FIXED   : Circuit Breaker, Health Check, Grace Period, AutoScaling Role
+
+# ?? Parameters ?????????????????????????????????????????????????????????????????
+Parameters:
+  AppName:
+    Type: String
+    Default: shopnxt
+    Description: Application name prefix
+
+  Environment:
+    Type: String
+    Default: production
+    AllowedValues: [production, staging, development]
+
+  ContainerPort:
+    Type: Number
+    Default: 5000
+    Description: Port the Flask app runs on
+
+  TaskCpu:
+    Type: String
+    Default: "256"
+    AllowedValues: ["256", "512", "1024", "2048"]
+    Description: Task CPU units (256 = 0.25 vCPU)
+
+  TaskMemory:
+    Type: String
+    Default: "512"
+    AllowedValues: ["512", "1024", "2048"]
+    Description: Task memory in MB
+
+  DesiredCount:
+    Type: Number
+    Default: 1
+    MinValue: 1
+    MaxValue: 10
+    Description: Number of ECS tasks to run
+
+  ImageTag:
+    Type: String
+    Default: latest
+    Description: Docker image tag from ECR
+
+Resources:
+
+  # ????????????????????????????????????????????????????????????????????????????
+  # CloudWatch Log Group
+  # ????????????????????????????????????????????????????????????????????????????
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/ecs/${AppName}"
+      RetentionInDays: 7
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-log-group"
+        - Key: Owner
+          Value: Surya
+        - Key: Project
+          Value: ShopNxt
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # ????????????????????????????????????????????????????????????????????????????
+  # IAM ? Task Execution Role
+  # FIX: ecr:GetAuthorizationToken must be Resource "*" (AWS hard requirement)
+  # FIX: Merged into single inline policy to avoid duplicate conflicts
+  # ????????????????????????????????????????????????????????????????????????????
+  TaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AppName}-ecs-execution-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Policies:
+        - PolicyName: !Sub "${AppName}-execution-extras"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource:
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${AppName}/*"
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/ecs/${AppName}:*"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-ecs-execution-role"
+        - Key: Owner
+          Value: Surya
+        - Key: Project
+          Value: ShopNxt
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # ????????????????????????????????????????????????????????????????????????????
+  # IAM ? Task Role (runtime permissions for app container)
+  # ????????????????????????????????????????????????????????????????????????????
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AppName}-ecs-task-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-ecs-task-role"
+        - Key: Owner
+          Value: Surya
+        - Key: Project
+          Value: ShopNxt
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # ????????????????????????????????????????????????????????????????????????????
+  # IAM ? Auto Scaling Role
+  # FIX: Old code used hardcoded service-linked role ARN which may not exist.
+  #      Create a dedicated role ? guaranteed to exist at deploy time.
+  # ????????????????????????????????????????????????????????????????????????????
+  AutoScalingRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AppName}-ecs-autoscaling-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: application-autoscaling.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub "${AppName}-autoscaling-policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecs:DescribeServices
+                  - ecs:UpdateService
+                  - cloudwatch:PutMetricAlarm
+                  - cloudwatch:DescribeAlarms
+                  - cloudwatch:DeleteAlarms
+                Resource: "*"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-ecs-autoscaling-role"
+        - Key: Owner
+          Value: Surya
+        - Key: Project
+          Value: ShopNxt
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # ????????????????????????????????????????????????????????????????????????????
+  # ECS Cluster
+  # FIX: Use FARGATE on-demand only for first deployment.
+  #      FARGATE_SPOT task interruptions during cold boot triggered the
+  #      circuit breaker. Enable Spot only after confirming stable health.
+  # ????????????????????????????????????????????????????????????????????????????
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub "${AppName}-cluster"
+      CapacityProviders:
+        - FARGATE
+        - FARGATE_SPOT
+      DefaultCapacityProviderStrategy:
+        - CapacityProvider: FARGATE
+          Weight: 1
+          Base: 1
+        - CapacityProvider: FARGATE_SPOT
+          Weight: 0
+          Base: 0
+      ClusterSettings:
+        - Name: containerInsights
+          Value: disabled
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-ecs-cluster"
+        - Key: Owner
+          Value: Surya
+        - Key: Project
+          Value: ShopNxt
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Stack
+          Value: stack-4-ecs
+
+  # ????????????????????????????????????????????????????????????????????????????
+  # ECS Task Definition
+  # FIX 1: Removed container-level HealthCheck entirely.
+  #         ALB already checks /health every 30s via Target Group.
+  #         Having both checks caused a race condition ? circuit breaker fired.
+  # FIX 2: Removed Ulimits ? can silently fail on some Fargate versions.
+  # FIX 3: awslogs-group uses literal string (not !Ref) to avoid circular dep.
+  # ????????????????????????????????????????????????????????????????????????????
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    DependsOn: LogGroup
+    Properties:
+      Family: !Sub "${AppName}-task"
+      Cpu: !Ref TaskCpu
+      Memory: !Ref TaskMemory
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt TaskRole.Arn
+      ContainerDefinitions:
+        - Name: !Sub "${AppName}-container"
+          Image: !Sub
+            - "${ECRUri}:${Tag}"
+            - ECRUri: !ImportValue
+                Fn::Sub: "${AppName}-ecr-uri"
+              Tag: !Ref ImageTag
+          Essential: true
+          PortMappings:
+            - ContainerPort: !Ref ContainerPort
+              Protocol: tcp
+          Environment:
+            - Name: PORT
+              Value: !Sub "${ContainerPort}"
+            - Name: FLASK_ENV
+              Value: !Ref Environment
+            - Name: APP_NAME
+              Value: ShopNxt
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Sub "/ecs/${AppName}"
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+          ReadonlyRootFilesystem: false
+          Privileged: false
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-task-definition"
+        - Key: Owner
+          Value: Surya
+        - Key: Project
+          Value: ShopNxt
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # ????????????????????????????????????????????????????????????????????????????
+  # ECS Service
+  # FIX 1: Circuit Breaker DISABLED ? was triggering before Flask fully started.
+  # FIX 2: HealthCheckGracePeriodSeconds raised 30 ? 120 seconds.
+  #         Fargate cold start + gunicorn workers need at least 60-90s.
+  # FIX 3: MinimumHealthyPercent = 0 so replacement task can start
+  #         when DesiredCount=1 (no extra capacity needed).
+  # FIX 4: LaunchType: FARGATE (explicit) instead of CapacityProviderStrategy
+  #         to guarantee on-demand for first deploy.
+  # FIX 5: Removed PlacementStrategies ? not valid for Fargate launch type.
+  # FIX 6: DependsOn LogGroup ensures log group exists before task starts.
+  # ????????????????????????????????????????????????????????????????????????????
+  ECSService:
+    Type: AWS::ECS::Service
+    DependsOn:
+      - LogGroup
+      - TaskDefinition
+    Properties:
+      ServiceName: !Sub "${AppName}-service"
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref TaskDefinition
+      DesiredCount: !Ref DesiredCount
+      LaunchType: FARGATE
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 0
+        MaximumPercent: 200
+        DeploymentCircuitBreaker:
+          Enable: false
+          Rollback: false
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          Subnets:
+            - !ImportValue
+              Fn::Sub: "${AppName}-private-subnet-1"
+            - !ImportValue
+              Fn::Sub: "${AppName}-private-subnet-2"
+          SecurityGroups:
+            - !ImportValue
+              Fn::Sub: "${AppName}-ecs-sg-id"
+          AssignPublicIp: DISABLED
+      LoadBalancers:
+        - ContainerName: !Sub "${AppName}-container"
+          ContainerPort: !Ref ContainerPort
+          TargetGroupArn: !ImportValue
+            Fn::Sub: "${AppName}-tg-arn"
+      HealthCheckGracePeriodSeconds: 120
+      EnableExecuteCommand: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-ecs-service"
+        - Key: Owner
+          Value: Surya
+        - Key: Project
+          Value: ShopNxt
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Stack
+          Value: stack-4-ecs
+
+  # ????????????????????????????????????????????????????????????????????????????
+  # Auto Scaling
+  # FIX: ResourceId uses !GetAtt ECSService.Name (not hardcoded string)
+  # FIX: RoleARN uses !GetAtt AutoScalingRole.Arn (not service-linked ARN)
+  # ????????????????????????????????????????????????????????????????????????????
+  AutoScalingTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    DependsOn: ECSService
+    Properties:
+      MinCapacity: 1
+      MaxCapacity: 4
+      ResourceId: !Sub
+        - "service/${ClusterName}/${ServiceName}"
+        - ClusterName: !Ref ECSCluster
+          ServiceName: !GetAtt ECSService.Name
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+      RoleARN: !GetAtt AutoScalingRole.Arn
+
+  ScaleOutPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    DependsOn: AutoScalingTarget
+    Properties:
+      PolicyName: !Sub "${AppName}-cpu-scaling"
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref AutoScalingTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 70.0
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
+        ScaleInCooldown: 300
+        ScaleOutCooldown: 60
+
+  # ????????????????????????????????????????????????????????????????????????????
+  # SNS Alert + CloudWatch Alarm
+  # ????????????????????????????????????????????????????????????????????????????
+  SNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${AppName}-ecs-alerts"
+      Subscription:
+        - Protocol: email
+          Endpoint: samsurya899@gmail.com
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-ecs-alerts"
+        - Key: Owner
+          Value: Surya
+        - Key: Project
+          Value: ShopNxt
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  ECSCPUAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${AppName}-ecs-cpu-high"
+      AlarmDescription: "ShopNxt ECS CPU above 80% ? Owner: Surya"
+      Namespace: AWS/ECS
+      MetricName: CPUUtilization
+      Dimensions:
+        - Name: ClusterName
+          Value: !Ref ECSCluster
+        - Name: ServiceName
+          Value: !GetAtt ECSService.Name
+      Statistic: Average
+      Period: 60
+      EvaluationPeriods: 3
+      Threshold: 80
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      AlarmActions:
+        - !Ref SNSTopic
+      TreatMissingData: notBreaching
+
+# ?? Outputs ????????????????????????????????????????????????????????????????????
+Outputs:
+
+  ECSClusterName:
+    Description: ECS Cluster Name
+    Value: !Ref ECSCluster
+    Export:
+      Name: !Sub "${AppName}-cluster-name"
+
+  ECSClusterArn:
+    Description: ECS Cluster ARN
+    Value: !GetAtt ECSCluster.Arn
+    Export:
+      Name: !Sub "${AppName}-cluster-arn"
+
+  ECSServiceName:
+    Description: ECS Service Name
+    Value: !GetAtt ECSService.Name
+    Export:
+      Name: !Sub "${AppName}-service-name"
+
+  TaskDefinitionArn:
+    Description: Task Definition ARN
+    Value: !Ref TaskDefinition
+    Export:
+      Name: !Sub "${AppName}-task-def-arn"
+
+  TaskExecutionRoleArn:
+    Description: Task Execution Role ARN
+    Value: !GetAtt TaskExecutionRole.Arn
+    Export:
+      Name: !Sub "${AppName}-task-exec-role-arn"
+
+  AppURL:
+    Description: ShopNxt Application URL via ALB
+    Value: !Sub
+      - "http://${ALBDNS}"
+      - ALBDNS: !ImportValue
+          Fn::Sub: "${AppName}-alb-dns"
